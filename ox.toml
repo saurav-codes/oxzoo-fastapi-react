@@ -38,5 +38,5 @@ health_url = "http://127.0.0.1:9110/health"
 
 [[domains]]
 name = "fastapi-react.oxzoo.sorv.dev"
-tls = false
+tls = true
 spa = true
