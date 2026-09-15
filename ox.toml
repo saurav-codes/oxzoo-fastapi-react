@@ -1,0 +1,42 @@
+# ox deploy manifest for oxzoo-fastapi-react.
+# uv runs the FastAPI app on 127.0.0.1:9110; nginx serves dist/ (SPA) and
+# proxies /api and /health to the web process.
+
+name = "oxzoo-fastapi-react"
+branch = "main"
+runtime = "python"
+framework = "fastapi"
+package_manager = "uv"
+port = 9110
+environment_file = "/etc/ox/apps/oxzoo-fastapi-react.env"
+
+required_packages = ["nodejs"]
+
+[[apt_sources]]
+name = "nodesource"
+url = "https://deb.nodesource.com/node_22.x"
+suite = "nodistro"
+components = ["main"]
+key_url = "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
+
+[frontend]
+dist = "dist"
+api_paths = ["/api", "/health"]
+
+[[processes]]
+name = "web"
+command = "uv run uvicorn main:app --host 127.0.0.1 --port {port}"
+readiness = "http://127.0.0.1:{port}/health"
+
+[deploy]
+install = [
+    "uv sync --frozen",
+    "npm install",
+]
+build = ["npm", "run", "build"]
+health_url = "http://127.0.0.1:9110/health"
+
+[[domains]]
+name = "fastapi-react.oxzoo.sorv.dev"
+tls = false
+spa = true
