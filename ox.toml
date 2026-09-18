@@ -5,10 +5,8 @@
 name = "oxzoo-fastapi-react"
 branch = "main"
 runtime = "python"
-framework = "fastapi"
 package_manager = "uv"
 port = 9110
-environment_file = "/etc/ox/projects/oxzoo-fastapi-react.env"
 
 required_packages = ["nodejs"]
 
