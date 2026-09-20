@@ -24,7 +24,7 @@ Copy `.env.example` to `.env` for local work only. Never commit `.env`; on the V
 
 ## Deploy with ox
 
-1. Paste the clone URL (`https://github.com/saurav-codes/oxzoo-fastapi-react.git`) into the ox dashboard.
+1. Paste the clone URL (`git@github.com:saurav-codes/oxzoo-fastapi-react.git`) into the ox dashboard.
 2. Set `GREETING_TAG` (placeholder: `GREETING_TAG=dev-01`) in the Environment editor BEFORE the first deploy: the install and build hooks bake it into the frontend, and the runtime reads it for the backend.
 3. Press Deploy. ox validates `ox.toml`, runs `uv sync --frozen` and `npm install`, builds `dist/`, starts the uvicorn systemd unit, polls `/health`, then switches nginx.
 
