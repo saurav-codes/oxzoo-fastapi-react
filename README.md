@@ -11,6 +11,16 @@ The official ox deploy example for a FastAPI backend with a React 18 SPA fronten
 | Frontend | React + React DOM (npm) | 18.3.1 |
 | Bundler | Vite + @vitejs/plugin-react | 5.4.21 / 4.7.0 |
 | Serving | nginx (SPA) + systemd (uvicorn on 127.0.0.1:9110) | managed by ox |
+| Services | postgres@17 (pgcrypto), redis@7 | declared in `ox.toml` `[[services]]` |
+
+## Services
+
+Two ox catalog services back the API; their credentials arrive as env keys the deploy injects automatically:
+
+- **postgres** — `DATABASE_URL` (orm: SQLAlchemy 2 + psycopg 3). Every `/api/greeting` hit inserts one row into `greeting_log`; `GET /api/stats` returns its row count. The schema is applied by alembic (`migrate` hook: `uv run alembic upgrade head`), including the `pgcrypto` extension used for `gen_random_uuid()` ids.
+- **redis** — `REDIS_URL`. `GET /api/visits` atomically increments `oxzoo:visits` and sets a 1-hour TTL on the first hit, so the counter resets itself.
+
+Both are read via `DATABASE_URL`/`REDIS_URL` only, with local-dev fallbacks in `db.py` and `main.py`. Never split them into `DATABASE_*`-style keys.
 
 ## Environment flow
 
@@ -26,7 +36,7 @@ Copy `.env.example` to `.env` for local work only. Never commit `.env`; on the V
 
 1. Paste the clone URL (`git@github.com:saurav-codes/oxzoo-fastapi-react.git`) into the ox dashboard.
 2. Set `GREETING_TAG` (placeholder: `GREETING_TAG=dev-01`) in the Environment editor BEFORE the first deploy: the install and build hooks bake it into the frontend, and the runtime reads it for the backend.
-3. Press Deploy. ox validates `ox.toml`, runs `uv sync --frozen` and `npm install`, builds `dist/`, starts the uvicorn systemd unit, polls `/health`, then switches nginx.
+3. Press Deploy. ox validates `ox.toml`, runs `uv sync --frozen` and `npm install`, builds `dist/`, applies the alembic migrations (`uv run alembic upgrade head`, with a pre-migrate database dump), starts the uvicorn systemd unit, polls `/health`, then switches nginx.
 
 ## Expected output
 
