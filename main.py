@@ -17,7 +17,7 @@ app = FastAPI()
 
 @app.get("/api/greeting")
 def greeting():
-    # Read at runtime: changing GREETING_TAG in the ox env editor applies on restart, no rebuild.
+    # Read at run time, on every request.
     line = f"hello world oxzoo-fastapi-react_{os.environ['GREETING_TAG']}"
     # Every hit is logged to postgres; /api/stats reports the running count.
     with Session() as session:

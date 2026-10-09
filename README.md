@@ -2,51 +2,109 @@
 
 Deployed with [ox](https://deploywithox.com): deploy a repo to your own server with one command, no Docker. [Docs](https://deploywithox.com/docs) · [Guide for this stack](https://deploywithox.com/docs/guides/fastapi)
 
-The official ox deploy example for a FastAPI backend with a React 18 SPA frontend on one Ubuntu VPS (systemd + nginx). uv resolves and runs the Python backend, npm builds the frontend, and ox wires up nginx to serve the built `dist/` while proxying the API. Clone, set one environment variable, press Deploy.
+An [ox](https://deploywithox.com) deploy example: a FastAPI backend with a React 18 SPA, deployed to your own Ubuntu server. uv installs and runs the backend, npm builds the frontend, systemd runs uvicorn, and Caddy serves the built `dist/` while sending the API paths to uvicorn.
 
 ## Stack
 
-| Layer | Tool | Pinned version |
+| Layer | Tool | Version |
 |---|---|---|
 | Backend | FastAPI | 0.141.1 |
-| Backend server | uvicorn (via uv, Python 3.13) | 0.53.0 |
-| Frontend | React + React DOM (npm) | 18.3.1 |
+| Server | uvicorn (Python 3.13, uv) | 0.53.0 |
+| Database | SQLAlchemy 2, psycopg 3, alembic | |
+| Frontend | React + React DOM | 18.3.1 |
 | Bundler | Vite + @vitejs/plugin-react | 5.4.21 / 4.7.0 |
-| Serving | nginx (SPA) + systemd (uvicorn on 127.0.0.1:9110) | managed by ox |
-| Services | postgres@17 (pgcrypto), redis@7 | declared in `ox.toml` `[[services]]` |
+| Services | PostgreSQL 18 (pgcrypto), Redis 8 | provided by ox from `[services]` |
+
+## ox.toml
+
+```toml
+# FastAPI (uv) + alembic migrations + pgcrypto, and a React SPA.
+
+[app]
+start  = "uv run uvicorn main:app --host 127.0.0.1 --port $PORT"
+health = "/health"
+
+[static]
+dir = "dist"
+spa = true
+api = ["/api", "/health"]
+
+[build]
+commands = ["uv sync --frozen --no-dev", "npm run build"]
+migrate  = "uv run alembic upgrade head"
+
+[services]
+postgres = { extensions = ["pgcrypto"] }
+redis    = {}
+
+[tools]
+node = "24"
+```
+
+The repo has two lockfiles, so ox's detected install is `npm ci` and `[build] commands` adds `uv sync` before the SPA build. `[build] migrate` runs alembic before traffic switches, and ox snapshots the database first.
 
 ## Services
 
-Two ox catalog services back the API; their credentials arrive as env keys the deploy injects automatically:
+- **postgres:** `DATABASE_URL`. Every `/api/greeting` hit inserts one row into `greeting_log`; `GET /api/stats` returns its row count. alembic creates the schema, including the `pgcrypto` extension used for `gen_random_uuid()` ids.
+- **redis:** `REDIS_URL`. `GET /api/visits` increments `oxzoo:visits` and sets a one-hour TTL on the first hit.
 
-- **postgres** — `DATABASE_URL` (orm: SQLAlchemy 2 + psycopg 3). Every `/api/greeting` hit inserts one row into `greeting_log`; `GET /api/stats` returns its row count. The schema is applied by alembic (`migrate` hook: `uv run alembic upgrade head`), including the `pgcrypto` extension used for `gen_random_uuid()` ids.
-- **redis** — `REDIS_URL`. `GET /api/visits` atomically increments `oxzoo:visits` and sets a 1-hour TTL on the first hit, so the counter resets itself.
-
-Both are read via `DATABASE_URL`/`REDIS_URL` only, with local-dev fallbacks in `db.py` and `main.py`. Never split them into `DATABASE_*`-style keys.
+`db.py` and `main.py` fall back to local addresses when the variables are unset, for local development.
 
 ## Environment flow
 
-One variable, two different moments:
-
-- **Backend, runtime**: `GET /api/greeting` reads `GREETING_TAG` from `os.environ` on every request. ox injects the value from the Environment editor into the service's environment file, so changing the tag needs only a process restart, never a rebuild.
-- **Frontend, build time**: `src/App.jsx` reads `import.meta.env.GREETING_TAG`, which Vite inlines at build time because `vite.config.js` sets `envPrefix: ["GREETING_", "VITE_"]`. The deploy's `npm run build` hook bakes the value into `dist/`, so changing it means redeploying.
-- **Serving**: nginx serves `dist/` from the current release with an `index.html` fallback (SPA mode) and proxies `/api` and `/health` to uvicorn on 127.0.0.1:9110.
-
-Copy `.env.example` to `.env` for local work only. Never commit `.env`; on the VPS, values live in the ox Environment editor, not in git.
+- **Backend, run time:** `GET /api/greeting` reads `GREETING_TAG` on every request.
+- **Frontend, build time:** `src/App.jsx` reads `import.meta.env.GREETING_TAG`, which Vite inlines because `vite.config.js` sets `envPrefix: ["GREETING_", "VITE_"]`. ox sets your variables before the build, and changing one with `ox vars set` redeploys, which rebuilds the SPA.
 
 ## Deploy with ox
 
-1. Paste the clone URL (`git@github.com:saurav-codes/oxzoo-fastapi-react.git`) into the ox dashboard.
-2. Set `GREETING_TAG` (placeholder: `GREETING_TAG=dev-01`) in the Environment editor BEFORE the first deploy: the install and build hooks bake it into the frontend, and the runtime reads it for the backend.
-3. Press Deploy. ox validates `ox.toml`, runs `uv sync --frozen` and `npm install`, builds `dist/`, applies the alembic migrations (`uv run alembic upgrade head`, with a pre-migrate database dump), starts the uvicorn systemd unit, polls `/health`, then switches nginx.
+```sh
+curl -fsSL https://deploywithox.com/install.sh | sh
+ox login
+ox new https://github.com/saurav-codes/oxzoo-fastapi-react
+printf 'GREETING_TAG=demo\n' | ox review oxzoo-fastapi-react --from-file - --wait
+```
+
+The plan, offline:
+
+```console
+$ ox check .
+ox check . (manifest: ox.toml)
+
+  app.start                  uv run uvicorn main:app --host 127.0.0.1 --port $PORT declared
+  app.health                 /health                                              declared
+  static.dir                 dist                                                 declared
+  static.spa                 true                                                 declared
+  static.api                 /api, /health                                        declared
+  build.install              npm ci                                               detected:package-lock.json
+  build.commands[0]          uv sync --frozen --no-dev                            declared
+  build.commands[1]          npm run build                                        declared
+  build.migrate              uv run alembic upgrade head                          declared
+  tools.node                 24                                                   declared
+  tools.python               3.13                                                 detected:.python-version
+  tools.uv                   0.11                                                 default
+  services.postgres          postgres 18 (shared)                                 default
+  services.redis             redis 8 (only for this project)                      default
+
+  Provided by ox: PORT, HOST, OX_ENV, OX_PROJECT, OX_RELEASE, OX_DATA_DIR, PUBLIC_URL, PUBLIC_HOST, DATABASE_URL, REDIS_URL
+  Set on the dashboard before the first deploy: GREETING_TAG
+
+Ready to deploy.
+```
 
 ## Expected output
 
-With `GREETING_TAG=<tag>` set before deploying:
-
 ```
-frontend: hello world oxzoo-fastapi-react_<tag>
-backend: hello world oxzoo-fastapi-react_<tag>
+frontend: hello world oxzoo-fastapi-react_<GREETING_TAG>
+backend: hello world oxzoo-fastapi-react_<GREETING_TAG>
 ```
 
-The frontend line is baked at build time; the backend line comes from the live environment.
+The frontend line is baked at build time; the backend line comes from the running process.
+
+## Local development
+
+```sh
+uv sync && npm install
+uv run alembic upgrade head            # needs a local PostgreSQL, or export DATABASE_URL
+GREETING_TAG=dev npm run build
+GREETING_TAG=dev uv run uvicorn main:app --port 8000
+```

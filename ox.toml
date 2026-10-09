@@ -1,52 +1,21 @@
-# ox deploy manifest for oxzoo-fastapi-react.
-# uv runs the FastAPI app on 127.0.0.1:9110; nginx serves dist/ (SPA) and
-# proxies /api and /health to the web process.
+# FastAPI (uv) + alembic migrations + pgcrypto, and a React SPA.
 
-name = "oxzoo-fastapi-react"
-branch = "main"
-runtime = "python"
-package_manager = "uv"
-port = 9110
+[app]
+start  = "uv run uvicorn main:app --host 127.0.0.1 --port $PORT"
+health = "/health"
 
-required_packages = ["nodejs"]
-
-[[apt_sources]]
-name = "nodesource"
-url = "https://deb.nodesource.com/node_22.x"
-suite = "nodistro"
-components = ["main"]
-key_url = "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
-
-[frontend]
-dist = "dist"
-api_paths = ["/api", "/health"]
-
-[[processes]]
-name = "web"
-command = "uv run uvicorn main:app --host 127.0.0.1 --port {port}"
-depends_on = ["postgres", "redis"]
-readiness = "http://127.0.0.1:{port}/health"
-
-[deploy]
-install = [
-    "uv sync --frozen",
-    "npm install",
-]
-build = ["npm", "run", "build"]
-migrate = ["uv run alembic upgrade head"]
-health_url = "http://127.0.0.1:9110/health"
-
-# postgres backs /api/stats (greeting_log row counts), redis backs /api/visits.
-# pgcrypto provides gen_random_uuid() for the greeting_log id.
-[[services]]
-id = "postgres@17"
-[services.args]
-extensions = ["pgcrypto"]
-
-[[services]]
-id = "redis@7"
-
-[[domains]]
-name = "fastapi-react.oxzoo.sorv.dev"
-tls = true
+[static]
+dir = "dist"
 spa = true
+api = ["/api", "/health"]
+
+[build]
+commands = ["uv sync --frozen --no-dev", "npm run build"]
+migrate  = "uv run alembic upgrade head"
+
+[services]
+postgres = { extensions = ["pgcrypto"] }
+redis    = {}
+
+[tools]
+node = "24"
