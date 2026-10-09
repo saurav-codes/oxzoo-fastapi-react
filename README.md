@@ -1,5 +1,7 @@
 # oxzoo-fastapi-react
 
+Deployed with [ox](https://deploywithox.com): deploy a repo to your own server with one command, no Docker. [Docs](https://deploywithox.com/docs) · [Guide for this stack](https://deploywithox.com/docs/guides/fastapi)
+
 The official ox deploy example for a FastAPI backend with a React 18 SPA frontend on one Ubuntu VPS (systemd + nginx). uv resolves and runs the Python backend, npm builds the frontend, and ox wires up nginx to serve the built `dist/` while proxying the API. Clone, set one environment variable, press Deploy.
 
 ## Stack
