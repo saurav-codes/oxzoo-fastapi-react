@@ -1,4 +1,5 @@
 import os
+import re
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -8,8 +9,9 @@ from sqlalchemy.orm import sessionmaker
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgres://postgres@127.0.0.1:5432/oxzoo_fastapi_react"
 )
-# SQLAlchemy needs the postgresql+psycopg scheme; ox provides postgres://.
-SQLALCHEMY_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+# SQLAlchemy reads postgresql:// as psycopg2; this app uses psycopg 3.
+# The pattern takes postgres:// too, which an older ox agent provides.
+SQLALCHEMY_URL = re.sub(r"^postgres(ql)?://", "postgresql+psycopg://", DATABASE_URL)
 
 engine = create_engine(SQLALCHEMY_URL)
 Session = sessionmaker(engine)
